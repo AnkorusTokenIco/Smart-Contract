@@ -27,8 +27,8 @@ contract AnkorusTestToken is BasicToken, Ownable
     mapping (address => uint256) public lockoutMap;
     
     //  This is the 'Ticker' symbol and name for our Token.
-    string public constant symbol = "ANKV10";
-    string public constant name = "Ankorus Test Token V10";
+    string public constant symbol = "ANKV11";
+    string public constant name = "Ankorus Test Token V11";
     
     //  This is for how your token can be fracionalized. 
     uint8 public decimals = 18; 
@@ -40,8 +40,8 @@ contract AnkorusTestToken is BasicToken, Ownable
     
     function AnkorusTestToken()
     {
-        address twallet = 0x7e72a358d823eecC0e2bf087dAB2503EA9aF441B;
-        initialize( twallet, now, now + 1 days, 30000000 ether, 60000000 ether);
+        address twallet = 0x3336c2EB32F3bc5cC63154c4315031e5985B8fDc;
+        initialize( twallet, now + 1 hours, now + 1 days, 50000000 ether, 100000000 ether);
     }
     
     function supply() internal constant returns (uint256) 
@@ -62,8 +62,8 @@ contract AnkorusTestToken is BasicToken, Ownable
     
     function getRateAt(uint256 at) constant returns (uint256) 
     {
-        if (at < startDate) {
-            return 0;
+        if (at <= startDate) {
+            return 5600;
         } else if (at < (startDate + 1 hours)) {
             return 5600;
         } else if (at < (startDate + 2 hours)) {
@@ -144,7 +144,10 @@ contract AnkorusTestToken is BasicToken, Ownable
     function transfer( address _recipient, uint256 _value ) returns( bool )
     {
         //  Check to see if the sender is locked out from transferring tokens
-        require(startDate + lockoutMap[msg.sender] < now );
+        require(startDate + lockoutMap[msg.sender] < getCurrentTimestamp() );
+        
+        //  Check to see if the sale has ended
+        require(getCurrentTimestamp() > endDate);
         
         //  transfer
         super.transfer( _recipient, _value );
