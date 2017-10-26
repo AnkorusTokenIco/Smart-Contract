@@ -40,10 +40,20 @@ contract AnkorusTestToken is BasicToken, Ownable
     
     function AnkorusTestToken()
     {
-        address twallet = 0x3336c2EB32F3bc5cC63154c4315031e5985B8fDc;
-        initialize( twallet, now + 1 hours, now + 1 days, 50000000 ether, 100000000 ether);
+        //	For security purposes, might call initialize from constructor
     }
     
+	// For pushing pre-ICO records
+    function push(address buyer, uint256 amount) onlyOwner 
+	{
+        require(balances[wallet] >= amount);
+
+        // Transfer
+        balances[wallet] = balances[wallet].sub(amount);
+        balances[buyer] = balances[buyer].add(amount);
+        CompanyTokenPushed(buyer, amount);
+    }
+	
     function supply() internal constant returns (uint256) 
     {
         return balanceOf[0xb1];
