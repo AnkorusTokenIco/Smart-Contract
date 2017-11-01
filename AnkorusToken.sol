@@ -20,6 +20,10 @@ contract AnkorusTestToken is BasicToken, Ownable
     // Amount of raised money in wei.
     uint256 public weiRaised;
     
+    //  Tokens rate formule
+    uint16 public tokensSold = 0;
+    uint256 public tokensPerTraunch = 2000000;
+    
     //  Whitelist approval mapping
     mapping (address => bool) public whitelist;
     
@@ -27,8 +31,8 @@ contract AnkorusTestToken is BasicToken, Ownable
     mapping (address => uint256) public lockoutMap;
     
     //  This is the 'Ticker' symbol and name for our Token.
-    string public constant symbol = "ANKV11";
-    string public constant name = "Ankorus Test Token V11";
+    string public constant symbol = "ANKV12";
+    string public constant name = "Ankorus Test Token V12";
     
     //  This is for how your token can be fracionalized. 
     uint8 public decimals = 18; 
@@ -40,20 +44,10 @@ contract AnkorusTestToken is BasicToken, Ownable
     
     function AnkorusTestToken()
     {
-        //	For security purposes, might call initialize from constructor
+        address twallet = 0x3336c2EB32F3bc5cC63154c4315031e5985B8fDc;
+        initialize( twallet, now + 1 hours, now + 1 days, 50000000 ether, 100000000 ether);
     }
     
-	// For pushing pre-ICO records
-    function push(address buyer, uint256 amount) onlyOwner 
-	{
-        require(balances[wallet] >= amount);
-
-        // Transfer
-        balances[wallet] = balances[wallet].sub(amount);
-        balances[buyer] = balances[buyer].add(amount);
-        CompanyTokenPushed(buyer, amount);
-    }
-	
     function supply() internal constant returns (uint256) 
     {
         return balanceOf[0xb1];
@@ -70,23 +64,47 @@ contract AnkorusTestToken is BasicToken, Ownable
         return now;
     }
     
-    function getRateAt(uint256 at) constant returns (uint256) 
+    function getRateAt(uint256 _tokens) constant returns (uint256)
     {
-        if (at <= startDate) {
-            return 5600;
-        } else if (at < (startDate + 1 hours)) {
-            return 5600;
-        } else if (at < (startDate + 2 hours)) {
-            return 5200;
-        } else if (at < (startDate + 3 hours)) {
-            return 4800;
-        } else if (at < (startDate + 4 hours)) {
-            return 4400;
-        } else if (at <= endDate) {
-            return 4000;
-        } else {
-            return 0;
-        }
+        uint256 tokenssold = _tokens;
+        uint256 numberOfTraunches = 25;
+        
+	    //	This level of precision allows for calculation of 
+	    //	( x * ( numerator ** 2 ) ) / totalTraunchesSq to remain close to a whole number
+	    //	while not losing too much information
+	    uint256 precision = 1000000;
+
+	    //	0.000835 * precision;
+	    uint256 x = 835;
+
+	    //	0.001665 * precision;
+	    uint256 y = 1665;
+
+	    //	Numerator is current traunch level used to determine price
+	    //	Will be truncated to a whole number between 1 and 24 with the number being >=25
+	    //	impossible as we can't complete a purchase if more than 49999999 tokens are 
+	    //	sold (no more remaining)
+	    uint256 numerator = 1 + ( tokenssold / tokensPerTraunch );
+	
+	    //	Calculate token price before precision. Based on the formula p = x * (traunch/totalTraunches)^2 + y
+	    //	re-written in the form of p = ( x * traunch ^ 2 ) / totalTraunches ^ 2 + y to avoid floating point result
+	    //	As we can assume ( x * traunch ^ 2 ) will be greater than totalTraunches ^ 2 with a large enough precision
+	    uint256 totalTraunchesSq = numberOfTraunches ** 2;
+	    uint256 tokenPriceBeforePrecision = ( ( x * ( numerator ** 2 ) ) / totalTraunchesSq ) + y;
+
+	    //	The purpose of this function is to determine the amount of tokens for 1 ether, or tokensPerEther.
+	    //	what we have now is the price of a single in ether, or tokenPrice, which we can get from 
+	    //	tokenPriceBeforePrecision / precision - which would be a floating point number less than 0, 
+	    //	which we cant calculate given the lack of floating point math. 
+	    	
+	    //	However, if 1 / tokenPrice gives us the amount of tokens per ether, and
+	    //	tokenPrice = tokenPriceBeforePrecision / precision than what we end up as a final function
+	    //	is tokensPerEther = 1 / ( tokenPriceBeforePrecision / precision )
+	    //	which based on the rule that 1/(x/y) = y/x we can re write our formula as 
+	    //	tokensPerEther = precision / tokenPriceBeforePrecision giving us a result while
+	    //	avoiding any calulation resulting in a non whole number 
+	    uint256 tokensPerEther = precision / tokenPriceBeforePrecision;
+	    return tokensPerEther;
     }
     
     function initialize(address _wallet, uint256 _start, uint256 _end,
@@ -122,7 +140,7 @@ contract AnkorusTestToken is BasicToken, Ownable
         
         // Calculate token amount to be purchased
         uint256 weiAmount = value;
-        uint256 actualRate = getRateAt(getCurrentTimestamp());
+        uint256 actualRate = getRateAt(0)[3];
         uint256 amount = weiAmount.mul(actualRate);
 
         //  Check our supply
@@ -199,9 +217,3 @@ contract AnkorusTestToken is BasicToken, Ownable
     event Transfer( address indexed _owner, address indexed _recipient, uint256 _value );
     event Approval( address _owner, address _spender, uint256 _value );
 }
-
-
-
-
-
-
