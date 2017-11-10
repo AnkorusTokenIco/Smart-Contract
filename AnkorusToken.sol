@@ -16,12 +16,13 @@ contract AnkorusTestToken is BasicToken, Ownable
     // Sale period.
     uint256 public startDate;
     uint256 public endDate;
+    uint256 public whitelistDate;
 
     // Amount of raised money in wei.
     uint256 public weiRaised;
     
     //  Tokens rate formule
-    uint16 public tokensSold = 0;
+    uint256 public tokensSold = 0;
     uint256 public tokensPerTraunch = 2000000;
     
     //  Whitelist approval mapping
@@ -44,8 +45,12 @@ contract AnkorusTestToken is BasicToken, Ownable
     
     function AnkorusTestToken()
     {
-        address twallet = 0x3336c2EB32F3bc5cC63154c4315031e5985B8fDc;
-        initialize( twallet, now + 1 hours, now + 1 days, 50000000 ether, 100000000 ether);
+        //  **************** TEST CODE *******************************************
+        //  Ropsten multisig 0x766C0CBcb73608611Ca09D7C7d8C18eeB5b08155
+        //  Rinkeby multisig 0xf1C0C02355EF9cA31371C5660a36C1e83333e4e1
+        address twallet = 0x766C0CBcb73608611Ca09D7C7d8C18eeB5b08155;
+        initialize( twallet, now + 1 hours, now + 2 hours, 50000000 ether, 100000000 ether);
+        //  ************************* END TEST CODE ******************************
     }
     
     function supply() internal constant returns (uint256) 
@@ -64,47 +69,39 @@ contract AnkorusTestToken is BasicToken, Ownable
         return now;
     }
     
-    function getRateAt(uint256 _tokens) constant returns (uint256)
+    function getRateAt() constant returns (uint256)
     {
-        uint256 tokenssold = _tokens;
-        uint256 numberOfTraunches = 25;
+        uint256 traunch = tokensSold.div(tokensPerTraunch);
         
-	    //	This level of precision allows for calculation of 
-	    //	( x * ( numerator ** 2 ) ) / totalTraunchesSq to remain close to a whole number
-	    //	while not losing too much information
-	    uint256 precision = 1000000;
-
-	    //	0.000835 * precision;
-	    uint256 x = 835;
-
-	    //	0.001665 * precision;
-	    uint256 y = 1665;
-
-	    //	Numerator is current traunch level used to determine price
-	    //	Will be truncated to a whole number between 1 and 24 with the number being >=25
-	    //	impossible as we can't complete a purchase if more than 49999999 tokens are 
-	    //	sold (no more remaining)
-	    uint256 numerator = 1 + ( tokenssold / tokensPerTraunch );
-	
-	    //	Calculate token price before precision. Based on the formula p = x * (traunch/totalTraunches)^2 + y
-	    //	re-written in the form of p = ( x * traunch ^ 2 ) / totalTraunches ^ 2 + y to avoid floating point result
-	    //	As we can assume ( x * traunch ^ 2 ) will be greater than totalTraunches ^ 2 with a large enough precision
-	    uint256 totalTraunchesSq = numberOfTraunches ** 2;
-	    uint256 tokenPriceBeforePrecision = ( ( x * ( numerator ** 2 ) ) / totalTraunchesSq ) + y;
-
-	    //	The purpose of this function is to determine the amount of tokens for 1 ether, or tokensPerEther.
-	    //	what we have now is the price of a single in ether, or tokenPrice, which we can get from 
-	    //	tokenPriceBeforePrecision / precision - which would be a floating point number less than 0, 
-	    //	which we cant calculate given the lack of floating point math. 
-	    	
-	    //	However, if 1 / tokenPrice gives us the amount of tokens per ether, and
-	    //	tokenPrice = tokenPriceBeforePrecision / precision than what we end up as a final function
-	    //	is tokensPerEther = 1 / ( tokenPriceBeforePrecision / precision )
-	    //	which based on the rule that 1/(x/y) = y/x we can re write our formula as 
-	    //	tokensPerEther = precision / tokenPriceBeforePrecision giving us a result while
-	    //	avoiding any calulation resulting in a non whole number 
-	    uint256 tokensPerEther = precision / tokenPriceBeforePrecision;
-	    return tokensPerEther;
+        //  Price curve based on function at:
+        //  https://github.com/AnkorusTokenIco/Smart-Contract/blob/master/Price_curve.png
+        
+        if     ( traunch == 0 )  {return 600;}
+        else if( traunch == 1 )  {return 598;}
+        else if( traunch == 2 )  {return 596;}
+        else if( traunch == 3 )  {return 593;}
+        else if( traunch == 4 )  {return 588;}
+        else if( traunch == 5 )  {return 583;}
+        else if( traunch == 6 )  {return 578;}
+        else if( traunch == 7 )  {return 571;}
+        else if( traunch == 8 )  {return 564;}
+        else if( traunch == 9 )  {return 556;}
+        else if( traunch == 10 ) {return 547;}
+        else if( traunch == 11 ) {return 538;}
+        else if( traunch == 12 ) {return 529;}
+        else if( traunch == 13 ) {return 519;}
+        else if( traunch == 14 ) {return 508;}
+        else if( traunch == 15 ) {return 498;}
+        else if( traunch == 16 ) {return 487;}
+        else if( traunch == 17 ) {return 476;}
+        else if( traunch == 18 ) {return 465;}
+        else if( traunch == 19 ) {return 454;}
+        else if( traunch == 20 ) {return 443;}
+        else if( traunch == 21 ) {return 432;}
+        else if( traunch == 22 ) {return 421;}
+        else if( traunch == 23 ) {return 410;}
+        else if( traunch == 24 ) {return 400;}
+        else return 400;
     }
     
     function initialize(address _wallet, uint256 _start, uint256 _end,
@@ -120,6 +117,7 @@ contract AnkorusTestToken is BasicToken, Ownable
         endDate = _end;
         saleCap = _saleCap;
         wallet = _wallet;
+        whitelistDate = startDate - 1 days;
         totalCoinSupply = _totalSupply;
 
         balanceOf[wallet] = _totalSupply.sub(saleCap);
@@ -140,7 +138,7 @@ contract AnkorusTestToken is BasicToken, Ownable
         
         // Calculate token amount to be purchased
         uint256 weiAmount = value;
-        uint256 actualRate = getRateAt(0)[3];
+        uint256 actualRate = getRateAt();
         uint256 amount = weiAmount.mul(actualRate);
 
         //  Check our supply
@@ -154,19 +152,21 @@ contract AnkorusTestToken is BasicToken, Ownable
         // Transfer
         balanceOf[0xb1] = balanceOf[0xb1].sub(amount);
         balanceOf[beneficiary] = balanceOf[beneficiary].add(amount);
-        //TokenPurchase(msg.sender, beneficiary, weiAmount, amount);
+        TokenPurchase(msg.sender, weiAmount, amount);
 
         // Update state.
         uint256 updatedWeiRaised = weiRaised.add(weiAmount);
+        uint256 updatedTokensSold = tokensSold.add(amount);
         weiRaised = updatedWeiRaised;
+        tokensSold = updatedTokensSold;
 
         // Forward the fund to fund collection wallet.
         wallet.transfer(msg.value);
     }
     
-    function addWhitelist(address beneficiary) onlyOwner
+    function setWhitelist(address beneficiary, bool inList) onlyOwner
     {
-        whitelist[beneficiary] = true;
+        whitelist[beneficiary] = inList;
     }
     
     function transfer( address _recipient, uint256 _value ) returns( bool )
@@ -181,6 +181,20 @@ contract AnkorusTestToken is BasicToken, Ownable
         super.transfer( _recipient, _value );
         
         return true;
+    }
+    
+    function push(address buyer, uint256 amount, uint256 lockout) onlyOwner 
+    {
+        require(balanceOf[wallet] >= amount);
+
+        // Transfer
+        balanceOf[wallet] = balanceOf[wallet].sub(amount);
+        balanceOf[buyer] = balanceOf[buyer].add(amount);
+        CompanyTokenPushed(buyer, amount);
+        
+        //  Set lockout if there's a lockout time
+        if( lockout > 0 )
+            setLockout( buyer, lockout );
     }
     
     function setLockout(address target, uint256 time) onlyOwner
@@ -200,9 +214,10 @@ contract AnkorusTestToken is BasicToken, Ownable
     function saleActive() public constant returns (bool) 
     {
         //  Ability to purchase has begun for this purchaser with either 2 
-        //  conditions: Sale has started Or purchaser has been whitelisted to 
-        //  purchase tokens before The start date
-        bool checkSaleBegun = whitelist[msg.sender] || 
+        //  conditions: Sale has started 
+        //  Or purchaser has been whitelisted to purchase tokens before The start date
+        //  and the whitelistDate is active
+        bool checkSaleBegun = ( whitelist[msg.sender] && getCurrentTimestamp() > whitelistDate ) || 
             getCurrentTimestamp() >= startDate;
         
         //  Sale of tokens can not happen after the ico date or with no
@@ -213,7 +228,10 @@ contract AnkorusTestToken is BasicToken, Ownable
             
         return(canPurchase);
     }
-    
-    event Transfer( address indexed _owner, address indexed _recipient, uint256 _value );
-    event Approval( address _owner, address _spender, uint256 _value );
 }
+
+
+
+
+
+
