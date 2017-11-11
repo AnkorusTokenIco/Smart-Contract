@@ -3,7 +3,7 @@ pragma solidity ^0.4.16;
 import './BasicToken.sol';
 import './SafeMath.sol';
 
-contract AnkorusTestToken is BasicToken, Ownable
+contract AnkorusToken is BasicToken, Ownable
 {
     using SafeMath for uint256;
     
@@ -16,14 +16,13 @@ contract AnkorusTestToken is BasicToken, Ownable
     // Sale period.
     uint256 public startDate;
     uint256 public endDate;
-    uint256 public whitelistDate;
 
     // Amount of raised money in wei.
     uint256 public weiRaised;
     
     //  Tokens rate formule
     uint256 public tokensSold = 0;
-    uint256 public tokensPerTraunch = 2000000;
+    uint256 public tokensPerTrunche = 2000000;
     
     //  Whitelist approval mapping
     mapping (address => bool) public whitelist;
@@ -32,27 +31,30 @@ contract AnkorusTestToken is BasicToken, Ownable
     mapping (address => uint256) public lockoutMap;
     
     //  This is the 'Ticker' symbol and name for our Token.
-    string public constant symbol = "ANKV12";
-    string public constant name = "Ankorus Test Token V12";
+    string public constant symbol = "ANKV14";
+    string public constant name = "Ankorus Test Token V14";
     
     //  This is for how your token can be fracionalized. 
     uint8 public decimals = 18; 
     
-    // Event
+    // Events
     event TokenPurchase(address indexed purchaser, uint256 value, 
-        uint256 amount);
+        uint256 tokenAmount);
     event CompanyTokenPushed(address indexed buyer, uint256 amount);
+    event Burn( address burnAddress, uint256 amount);
     
-    function AnkorusTestToken()
+    function AnkorusToken()
     {
         //  **************** TEST CODE *******************************************
         //  Ropsten multisig 0x766C0CBcb73608611Ca09D7C7d8C18eeB5b08155
         //  Rinkeby multisig 0xf1C0C02355EF9cA31371C5660a36C1e83333e4e1
         address twallet = 0x766C0CBcb73608611Ca09D7C7d8C18eeB5b08155;
-        initialize( twallet, now + 1 hours, now + 2 hours, 50000000 ether, 100000000 ether);
+        initialize( twallet, now, now + 2 hours, 50000000 ether, 100000000 ether);
         //  ************************* END TEST CODE ******************************
     }
     
+    //  @dev gets the sale pool balance
+    //  @return tokens in the pool
     function supply() internal constant returns (uint256) 
     {
         return balanceOf[0xb1];
@@ -64,14 +66,18 @@ contract AnkorusTestToken is BasicToken, Ownable
         _;
     }
 
+    //  @dev gets the current time
+    //  @return current time
     function getCurrentTimestamp() internal constant returns (uint256) 
     {
         return now;
     }
     
+    //  @dev gets the current rate of tokens per ether contributed
+    //  @return number of tokens per ether
     function getRateAt() constant returns (uint256)
     {
-        uint256 traunch = tokensSold.div(tokensPerTraunch);
+        uint256 traunch = tokensSold.div(tokensPerTrunche);
         
         //  Price curve based on function at:
         //  https://github.com/AnkorusTokenIco/Smart-Contract/blob/master/Price_curve.png
@@ -104,6 +110,12 @@ contract AnkorusTestToken is BasicToken, Ownable
         else return 400;
     }
     
+    //  @dev Initialize wallet parms, can only be called once
+    //  @param _wallet - address of multisig wallet which receives contributions
+    //  @param _start - start date of sale
+    //  @param _end - end date of sale
+    //  @param _saleCap - amount of coins for sale
+    //  @param _totalSupply - total supply of coins
     function initialize(address _wallet, uint256 _start, uint256 _end,
                         uint256 _saleCap, uint256 _totalSupply)
                         onlyOwner uninitialized
@@ -117,7 +129,6 @@ contract AnkorusTestToken is BasicToken, Ownable
         endDate = _end;
         saleCap = _saleCap;
         wallet = _wallet;
-        whitelistDate = startDate - 1 days;
         totalCoinSupply = _totalSupply;
 
         balanceOf[wallet] = _totalSupply.sub(saleCap);
@@ -130,7 +141,9 @@ contract AnkorusTestToken is BasicToken, Ownable
         buyTokens(msg.sender, msg.value);
     }
 
-    //  Internal token purchase function
+    //  @dev Internal token purchase function
+    //  @param beneficiary - The address of the purchaser 
+    //  @param value - Value of contribution, in ether
     function buyTokens(address beneficiary, uint256 value) payable
     {
         require(beneficiary != 0x0);
@@ -139,86 +152,108 @@ contract AnkorusTestToken is BasicToken, Ownable
         // Calculate token amount to be purchased
         uint256 weiAmount = value;
         uint256 actualRate = getRateAt();
-        uint256 amount = weiAmount.mul(actualRate);
+        uint256 tokenAmount = weiAmount.mul(actualRate);
 
         //  Check our supply
-        //  Potentially redundant as balanceOf[0xb1].sub(amount) will
+        //  Potentially redundant as balanceOf[0xb1].sub(tokenAmount) will
         //  throw with insufficient supply
-        require(supply() >= amount);
+        require(supply() >= tokenAmount);
 
         //  Check conditions for sale
         require(saleActive());
         
         // Transfer
-        balanceOf[0xb1] = balanceOf[0xb1].sub(amount);
-        balanceOf[beneficiary] = balanceOf[beneficiary].add(amount);
-        TokenPurchase(msg.sender, weiAmount, amount);
+        balanceOf[0xb1] = balanceOf[0xb1].sub(tokenAmount);
+        balanceOf[beneficiary] = balanceOf[beneficiary].add(tokenAmount);
+        TokenPurchase(msg.sender, weiAmount, tokenAmount);
 
         // Update state.
         uint256 updatedWeiRaised = weiRaised.add(weiAmount);
-        uint256 updatedTokensSold = tokensSold.add(amount);
+        
+        //  Get the base value of tokens
+        uint256 base = tokenAmount.div(1 ether);
+        uint256 updatedTokensSold = tokensSold.add(base);
         weiRaised = updatedWeiRaised;
         tokensSold = updatedTokensSold;
 
-        // Forward the fund to fund collection wallet.
+        // Forward the funds to fund collection wallet.
         wallet.transfer(msg.value);
     }
     
+    //  @dev Set whitelist for specified address
+    //  @param beneficiary - The address to whitelist
+    //  @param value - value to set (can set address to true or false)
     function setWhitelist(address beneficiary, bool inList) onlyOwner
     {
         whitelist[beneficiary] = inList;
     }
     
-    function transfer( address _recipient, uint256 _value ) returns( bool )
+    //  @dev transfer tokens from one address to another
+    //  @param _recipient - The address to receive tokens
+    //  @param _value - number of coins to send
+    //  @return true if no requires thrown
+    function transfer( address _recipient, uint256 _value ) returns(bool)
     {
         //  Check to see if the sender is locked out from transferring tokens
-        require(startDate + lockoutMap[msg.sender] < getCurrentTimestamp() );
+        require(startDate + lockoutMap[msg.sender] < getCurrentTimestamp());
         
         //  Check to see if the sale has ended
         require(getCurrentTimestamp() > endDate);
         
         //  transfer
-        super.transfer( _recipient, _value );
+        super.transfer(_recipient, _value);
         
         return true;
     }
     
-    function push(address buyer, uint256 amount, uint256 lockout) onlyOwner 
+    //  @dev push tokens from treasury stock to specified address
+    //  @param beneficiary - The address to receive tokens
+    //  @param amount - number of coins to push
+    //  @param lockout - lockout time 
+    function push(address beneficiary, uint256 amount, uint256 lockout) onlyOwner 
     {
         require(balanceOf[wallet] >= amount);
 
         // Transfer
         balanceOf[wallet] = balanceOf[wallet].sub(amount);
-        balanceOf[buyer] = balanceOf[buyer].add(amount);
-        CompanyTokenPushed(buyer, amount);
+        balanceOf[beneficiary] = balanceOf[beneficiary].add(amount);
+        CompanyTokenPushed(beneficiary, amount);
         
         //  Set lockout if there's a lockout time
-        if( lockout > 0 )
-            setLockout( buyer, lockout );
+        if(lockout > 0)
+            setLockout(beneficiary, lockout);
     }
     
+    //  @dev set lockout period for specified address
+    //  @param target - The address to specifiy lockout time
+    //  @param time - amount of time to lockout
     function setLockout(address target, uint256 time) onlyOwner
     {
         lockoutMap[target] = time;
     }
     
+    //  @dev Burns tokens from sale pool remaining after the sale
     function finalize() onlyOwner 
     {
-        require(!saleActive());
+        //  Can only finalize after after sale is completed
+        require(getCurrentTimestamp() > endDate);
 
-        // Transfer the remainder of tokens to Ankorus wallet
-        balanceOf[wallet] = balanceOf[wallet].add(balanceOf[0xb1]);
+        // Burn tokens remaining
+        Burn(0xb1, balanceOf[0xb1]);
         balanceOf[0xb1] = 0;
     }
 
+    //  @dev check to see if the sale period is active
+    //  @return true if sale active, false otherwise
     function saleActive() public constant returns (bool) 
     {
         //  Ability to purchase has begun for this purchaser with either 2 
         //  conditions: Sale has started 
         //  Or purchaser has been whitelisted to purchase tokens before The start date
         //  and the whitelistDate is active
-        bool checkSaleBegun = ( whitelist[msg.sender] && getCurrentTimestamp() > whitelistDate ) || 
-            getCurrentTimestamp() >= startDate;
+        bool checkSaleBegun = (whitelist[msg.sender] && 
+            getCurrentTimestamp() >= (startDate - 1 days)) || 
+                getCurrentTimestamp() >= startDate;
         
         //  Sale of tokens can not happen after the ico date or with no
         //  supply in any case
