@@ -40,7 +40,7 @@ contract AnkorusToken is BasicToken, Ownable
     // Events
     event TokenPurchase(address indexed purchaser, uint256 value, 
         uint256 tokenAmount);
-    event CompanyTokenPushed(address indexed buyer, uint256 amount);
+    event CompanyTokenPushed(address indexed beneficiary, uint256 amount);
     event Burn( address burnAddress, uint256 amount);
     
     function AnkorusToken()
@@ -144,7 +144,7 @@ contract AnkorusToken is BasicToken, Ownable
     //  @dev Internal token purchase function
     //  @param beneficiary - The address of the purchaser 
     //  @param value - Value of contribution, in ether
-    function buyTokens(address beneficiary, uint256 value) payable
+    function buyTokens(address beneficiary, uint256 value) internal
     {
         require(beneficiary != 0x0);
         require(value >= 0.1 ether);
