@@ -1,4 +1,4 @@
-pragma solidity ^0.4.16;
+pragma solidity ^0.4.18;
 
 import './BasicToken.sol';
 import './SafeMath.sol';
@@ -31,8 +31,8 @@ contract AnkorusToken is BasicToken, Ownable
     mapping (address => uint256) public lockoutMap;
     
     //  This is the 'Ticker' symbol and name for our Token.
-    string public constant symbol = "ANKV14";
-    string public constant name = "Ankorus Test Token V14";
+    string public constant symbol = "ANKt17";
+    string public constant name = "Ankorus Test Token V17";
     
     //  This is for how your token can be fracionalized. 
     uint8 public decimals = 18; 
@@ -43,14 +43,8 @@ contract AnkorusToken is BasicToken, Ownable
     event CompanyTokenPushed(address indexed beneficiary, uint256 amount);
     event Burn( address burnAddress, uint256 amount);
     
-    function AnkorusToken()
+    function AnkorusToken() public 
     {
-        //  **************** TEST CODE *******************************************
-        //  Ropsten multisig 0x766C0CBcb73608611Ca09D7C7d8C18eeB5b08155
-        //  Rinkeby multisig 0xf1C0C02355EF9cA31371C5660a36C1e83333e4e1
-        address twallet = 0x766C0CBcb73608611Ca09D7C7d8C18eeB5b08155;
-        initialize( twallet, now, now + 2 hours, 50000000 ether, 100000000 ether);
-        //  ************************* END TEST CODE ******************************
     }
     
     //  @dev gets the sale pool balance
@@ -75,13 +69,12 @@ contract AnkorusToken is BasicToken, Ownable
     
     //  @dev gets the current rate of tokens per ether contributed
     //  @return number of tokens per ether
-    function getRateAt() constant returns (uint256)
+    function getRateAt() public constant returns (uint256)
     {
         uint256 traunch = tokensSold.div(tokensPerTrunche);
         
         //  Price curve based on function at:
         //  https://github.com/AnkorusTokenIco/Smart-Contract/blob/master/Price_curve.png
-        
         if     ( traunch == 0 )  {return 600;}
         else if( traunch == 1 )  {return 598;}
         else if( traunch == 2 )  {return 596;}
@@ -118,7 +111,7 @@ contract AnkorusToken is BasicToken, Ownable
     //  @param _totalSupply - total supply of coins
     function initialize(address _wallet, uint256 _start, uint256 _end,
                         uint256 _saleCap, uint256 _totalSupply)
-                        onlyOwner uninitialized
+                        public onlyOwner uninitialized
     {
         require(_start >= getCurrentTimestamp());
         require(_start < _end);
@@ -131,12 +124,21 @@ contract AnkorusToken is BasicToken, Ownable
         wallet = _wallet;
         totalCoinSupply = _totalSupply;
 
+        //  Set balance of company stock
         balanceOf[wallet] = _totalSupply.sub(saleCap);
+        
+        //  Log transfer of tokens to company wallet
+        Transfer(0x0, wallet, balanceOf[wallet]);
+        
+        //  Set balance of sale pool
         balanceOf[0xb1] = saleCap;
+        
+        //  Log transfer of tokens to ICO sale pool
+        Transfer(0x0, 0xb1, saleCap);
     }
     
     //  Fallback function is entry point to buy tokens
-    function () payable
+    function () public payable
     {
         buyTokens(msg.sender, msg.value);
     }
@@ -166,7 +168,10 @@ contract AnkorusToken is BasicToken, Ownable
         balanceOf[0xb1] = balanceOf[0xb1].sub(tokenAmount);
         balanceOf[beneficiary] = balanceOf[beneficiary].add(tokenAmount);
         TokenPurchase(msg.sender, weiAmount, tokenAmount);
-
+        
+        //  Log the transfer of tokens
+        Transfer(0xb1, beneficiary, tokenAmount);
+        
         // Update state.
         uint256 updatedWeiRaised = weiRaised.add(weiAmount);
         
@@ -183,7 +188,7 @@ contract AnkorusToken is BasicToken, Ownable
     //  @dev Set whitelist for specified address
     //  @param beneficiary - The address to whitelist
     //  @param value - value to set (can set address to true or false)
-    function setWhitelist(address beneficiary, bool inList) onlyOwner
+    function setWhitelist(address beneficiary, bool inList) public onlyOwner
     {
         whitelist[beneficiary] = inList;
     }
@@ -192,10 +197,10 @@ contract AnkorusToken is BasicToken, Ownable
     //  @param _recipient - The address to receive tokens
     //  @param _value - number of coins to send
     //  @return true if no requires thrown
-    function transfer( address _recipient, uint256 _value ) returns(bool)
+    function transfer( address _recipient, uint256 _value ) public returns(bool)
     {
         //  Check to see if the sender is locked out from transferring tokens
-        require(startDate + lockoutMap[msg.sender] < getCurrentTimestamp());
+        require(endDate + lockoutMap[msg.sender] < getCurrentTimestamp());
         
         //  Check to see if the sale has ended
         require(getCurrentTimestamp() > endDate);
@@ -210,14 +215,18 @@ contract AnkorusToken is BasicToken, Ownable
     //  @param beneficiary - The address to receive tokens
     //  @param amount - number of coins to push
     //  @param lockout - lockout time 
-    function push(address beneficiary, uint256 amount, uint256 lockout) onlyOwner 
+    function push(address beneficiary, uint256 amount, uint256 lockout) public 
+        onlyOwner 
     {
         require(balanceOf[wallet] >= amount);
 
         // Transfer
         balanceOf[wallet] = balanceOf[wallet].sub(amount);
         balanceOf[beneficiary] = balanceOf[beneficiary].add(amount);
+        
+        //  Log transfer of tokens
         CompanyTokenPushed(beneficiary, amount);
+        Transfer(wallet, beneficiary, amount);
         
         //  Set lockout if there's a lockout time
         if(lockout > 0)
@@ -227,19 +236,24 @@ contract AnkorusToken is BasicToken, Ownable
     //  @dev set lockout period for specified address
     //  @param target - The address to specifiy lockout time
     //  @param time - amount of time to lockout
-    function setLockout(address target, uint256 time) onlyOwner
+    function setLockout(address target, uint256 time) public onlyOwner
     {
         lockoutMap[target] = time;
     }
     
     //  @dev Burns tokens from sale pool remaining after the sale
-    function finalize() onlyOwner 
+    function finalize() public onlyOwner 
     {
         //  Can only finalize after after sale is completed
         require(getCurrentTimestamp() > endDate);
 
         // Burn tokens remaining
         Burn(0xb1, balanceOf[0xb1]);
+        totalCoinSupply = totalCoinSupply.sub(balanceOf[0xb1]);
+        
+        //  Log transfer to burn address
+        Transfer(0xb1, 0x0, balanceOf[0xb1]);
+        
         balanceOf[0xb1] = 0;
     }
 
