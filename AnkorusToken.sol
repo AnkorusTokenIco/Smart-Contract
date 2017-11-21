@@ -1,4 +1,4 @@
-pragma solidity ^0.4.18;
+pragma solidity 0.4.18;
 
 import './BasicToken.sol';
 import './SafeMath.sol';
@@ -26,13 +26,11 @@ contract AnkorusToken is BasicToken, Ownable
     
     //  Whitelist approval mapping
     mapping (address => bool) public whitelist;
+    bool public finalized = false;
     
-    //  Lockout mapping
-    mapping (address => uint256) public lockoutMap;
-    
-    //  This is the 'Ticker' symbol and name for our Token.
-    string public constant symbol = "ANKt17";
-    string public constant name = "Ankorus Test Token V17";
+   //  This is the 'Ticker' symbol and name for our Token.
+    string public constant symbol = "ANK";
+    string public constant name = "AnkorusToken";
     
     //  This is for how your token can be fracionalized. 
     uint8 public decimals = 18; 
@@ -62,7 +60,7 @@ contract AnkorusToken is BasicToken, Ownable
 
     //  @dev gets the current time
     //  @return current time
-    function getCurrentTimestamp() internal constant returns (uint256) 
+    function getCurrentTimestamp() public constant returns (uint256) 
     {
         return now;
     }
@@ -118,6 +116,7 @@ contract AnkorusToken is BasicToken, Ownable
         require(_wallet != 0x0);
         require(_totalSupply > _saleCap);
 
+        finalized = false;
         startDate = _start;
         endDate = _end;
         saleCap = _saleCap;
@@ -185,6 +184,17 @@ contract AnkorusToken is BasicToken, Ownable
         wallet.transfer(msg.value);
     }
     
+    //  @dev whitelist a batch of addresses. Note:Expensive
+    //  @param [] beneficiarys - Array set to whitelist
+    function batchApproveWhitelist(address[] beneficiarys) 
+        public onlyOwner
+    {
+        for (uint i=0; i<beneficiarys.length; i++) 
+        {
+            whitelist[beneficiarys[i]] = true;
+        }
+    }
+    
     //  @dev Set whitelist for specified address
     //  @param beneficiary - The address to whitelist
     //  @param value - value to set (can set address to true or false)
@@ -193,17 +203,25 @@ contract AnkorusToken is BasicToken, Ownable
         whitelist[beneficiary] = inList;
     }
     
+    //  @dev Time remaining until official sale begins
+    //  @returns time remaining, in seconds
+    function getTimeUntilStart() public constant returns (uint256)
+    {
+        if(getCurrentTimestamp() >= startDate)
+            return 0;
+            
+        return startDate.sub(getCurrentTimestamp());
+    }
+    
+    
     //  @dev transfer tokens from one address to another
     //  @param _recipient - The address to receive tokens
     //  @param _value - number of coins to send
     //  @return true if no requires thrown
     function transfer( address _recipient, uint256 _value ) public returns(bool)
     {
-        //  Check to see if the sender is locked out from transferring tokens
-        require(endDate + lockoutMap[msg.sender] < getCurrentTimestamp());
-        
         //  Check to see if the sale has ended
-        require(getCurrentTimestamp() > endDate);
+        require(finalized);
         
         //  transfer
         super.transfer(_recipient, _value);
@@ -215,7 +233,7 @@ contract AnkorusToken is BasicToken, Ownable
     //  @param beneficiary - The address to receive tokens
     //  @param amount - number of coins to push
     //  @param lockout - lockout time 
-    function push(address beneficiary, uint256 amount, uint256 lockout) public 
+    function push(address beneficiary, uint256 amount) public 
         onlyOwner 
     {
         require(balanceOf[wallet] >= amount);
@@ -227,18 +245,6 @@ contract AnkorusToken is BasicToken, Ownable
         //  Log transfer of tokens
         CompanyTokenPushed(beneficiary, amount);
         Transfer(wallet, beneficiary, amount);
-        
-        //  Set lockout if there's a lockout time
-        if(lockout > 0)
-            setLockout(beneficiary, lockout);
-    }
-    
-    //  @dev set lockout period for specified address
-    //  @param target - The address to specifiy lockout time
-    //  @param time - amount of time to lockout
-    function setLockout(address target, uint256 time) public onlyOwner
-    {
-        lockoutMap[target] = time;
     }
     
     //  @dev Burns tokens from sale pool remaining after the sale
@@ -246,6 +252,9 @@ contract AnkorusToken is BasicToken, Ownable
     {
         //  Can only finalize after after sale is completed
         require(getCurrentTimestamp() > endDate);
+
+        //  Set finalized
+        finalized = true;
 
         // Burn tokens remaining
         Burn(0xb1, balanceOf[0xb1]);
@@ -266,7 +275,7 @@ contract AnkorusToken is BasicToken, Ownable
         //  Or purchaser has been whitelisted to purchase tokens before The start date
         //  and the whitelistDate is active
         bool checkSaleBegun = (whitelist[msg.sender] && 
-            getCurrentTimestamp() >= (startDate - 1 days)) || 
+            getCurrentTimestamp() >= (startDate - 2 days)) || 
                 getCurrentTimestamp() >= startDate;
         
         //  Sale of tokens can not happen after the ico date or with no
