@@ -275,7 +275,7 @@ contract AnkorusToken is BasicToken, Ownable
         //  Or purchaser has been whitelisted to purchase tokens before The start date
         //  and the whitelistDate is active
         bool checkSaleBegun = (whitelist[msg.sender] && 
-            getCurrentTimestamp() >= (startDate - 2 days)) || 
+            getCurrentTimestamp() >= (startDate.sub(2 days))) || 
                 getCurrentTimestamp() >= startDate;
         
         //  Sale of tokens can not happen after the ico date or with no
